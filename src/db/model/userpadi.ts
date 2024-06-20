@@ -1,3 +1,4 @@
+/* eslint-disable no-invalid-this */
 import mongoose, {Document, Schema} from "mongoose";
 import bcrypt from "bcrypt";
 

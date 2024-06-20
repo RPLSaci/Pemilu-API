@@ -6,6 +6,7 @@ import cheerio from "cheerio";
 import {model} from "../db/model/userpadi.js";
 import {userInfo} from "../db/model/userInfo.js";
 const User = model;
+import {G4F} from "g4f";
 import type{berita} from "../util/interfaces.js";
 // import OpenAI from "openai";
 
@@ -105,7 +106,7 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign({userId: user._id}, (process.env.SALT as string));
     res.status(200).json({token});
   } catch (error) {
-    console.log(error)
+    console.log(error);
     res.status(500).json({error: "Something went wrong"});
   }
 });
@@ -137,10 +138,11 @@ router.get("/checkLogin", async (req, res) => {
 });
 
 
+const g4f = new G4F();
 router.post("/ai/ask", async (req, res) => {
   const id:string = req.body.id;
   const question:string = req.body.question;
-
+  console.log(question);
   try {
     const token = req.header("Authorization")?.replace("Bearer ", "");
     if (!token) {
@@ -164,7 +166,32 @@ router.post("/ai/ask", async (req, res) => {
 
   if (!cachedQuestion[id]) {
     cachedQuestion[id] = [
-      {"role": "user", "content": "Kamu adalah Sebuah asisten AI bernama PAWI, kamu adalah asisten yang berkerja dalam sektor pertanian, kamu akan memberikan informasi yang berfokuskan kepada topik pertanian, kamu juga akan menilai seberapa \"pertanian\" pertanyaan user, jika pertanyaan user tidak ada unsur pertanian sama sekali, maka kamu harus menambahkan kata kata \"-AKHIRI PEMBICARAAN-\"!, tidak boleh terlewat. mulai percakapan dengan \"ada yang bisa saya bantu ?\""},
+      {"role": "system", "content": `Anda adalah PAWI, seorang asisten AI ahli pertanian yang berpengalaman dan berpengetahuan luas. Tugas Anda adalah:
+
+
+
+Menilai Pertanyaan: Periksa apakah pertanyaan pengguna terkait dengan sektor pertanian.
+
+Jika Ya: Lanjutkan ke langkah 2.
+
+Jika Tidak: Akhiri percakapan dengan sopan menggunakan "-AKHIRI PEMBICARAAN-".
+
+Memberikan Informasi Pertanian: Jawab pertanyaan pengguna dengan langkah-langkah terpadu dan detail, disesuaikan dengan:
+
+Lokasi: Karawang
+
+Tipe Tanaman: Padi
+
+Waktu: 20 Juni 2024
+
+Prioritaskan Informasi Berkualitas: Gunakan sumber informasi yang relevan seperti lokasi yang diberikan, kredibel, dan terbaru dari:
+
+Penelitian ilmiah
+
+Publikasi pertanian terkemuka
+
+Praktik terbaik di lapangan
+`},
       {"role": "assistant", "content": "Apakah Ada yang bisa saya bantu ?"},
     ];
   }
@@ -176,10 +203,21 @@ router.post("/ai/ask", async (req, res) => {
   //   messages: cachedQuestion[id],
   // });
 
-  // cachedQuestion[id].push({"role": "assistant", "content": response.choices[0].message.content});
+  try {
+    const response = await g4f.chatCompletion(cachedQuestion[id], {
+      provider: g4f.providers.GPT,
+      model: "gpt-3.5-turbo",
+    });
+    console.log(response);
 
-  // res.status(200).json({"message": response.choices[0].message.content});
-  res.status(200).json({"message": "test"});
+    cachedQuestion[id].push({"role": "assistant", "content": response});
+
+    res.status(200).json({"message": response});
+  } catch (error) {
+    console.log(error);
+    res.status(401).json({message: "message is invalid"});
+  }
+  // res.status(200).json({"message": "test"});
 });
 
 router.get("/userInfo", async (req, res) => {
@@ -200,7 +238,7 @@ router.get("/userInfo", async (req, res) => {
         return res.status(404).json({error: "User not found"});
       }
 
-      res.status(200).json({user: user.username, terakhirTanam: user.terakhirTanam, tipeTanaman: user.tipeTanaman});
+      res.status(200).json({user: user.username, lokasi: user.lokasi? user.lokasi : null});
     });
   } catch (error) {
     res.status(500).json({error: "Something went wrong"});
