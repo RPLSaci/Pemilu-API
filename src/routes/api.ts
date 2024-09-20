@@ -15,8 +15,15 @@ router.get("/user/getAll", async (req, res) =>{
   });
 });
 
+router.get("/kandidat/getAll", async (req, res) =>{
+  const user = await Kandidat.find({});
+  res.json({
+    message: "Data received successfully",
+    data: user,
+  });
+});
 
-router.post("/user/submitMPK", async (req, res) => {
+router.post("/user/Cancel", async (req, res) => {
   const {username, password} = req.body;
 
   console.log(username, password);
@@ -33,7 +40,86 @@ router.post("/user/submitMPK", async (req, res) => {
       return res.status(401).json({error: "Invalid username or password"});
     }
 
+    // Check if user has made a selection
+    if (!user.kandidatMPK && !user.kandidatOsis) {
+      return res.status(400).json({error: "Kamu belum Memilih"});
+    }
+
+    // Reset the user's selections
+    const oldKandidatMPK = user.kandidatMPK;
+    const oldKandidatOSIS = user.kandidatOsis;
+
+    user.kandidatMPK = null;
+    user.kandidatOsis = null;
+    user.WaktuPemilihan = null;
+
+    // Update the candidates' total votes
+    if (oldKandidatMPK) {
+      const kandidatMPK = await Kandidat.findOne({nomerKandidat: oldKandidatMPK, tipe: "MPK"});
+      if (kandidatMPK && kandidatMPK.totalPemilih > 0) {
+        kandidatMPK.totalPemilih -= 1;
+        await kandidatMPK.save();
+      }
+    }
+
+    if (oldKandidatOSIS) {
+      const kandidatOSIS = await Kandidat.findOne({nomerKandidat: oldKandidatOSIS, tipe: "OSIS"});
+      if (kandidatOSIS && kandidatOSIS.totalPemilih > 0) {
+        kandidatOSIS.totalPemilih -= 1;
+        await kandidatOSIS.save();
+      }
+    }
+
+    await user.save();
+
+    return res.status(200).json({message: "Berhasil membatalkan pilihan"});
+  } catch (error) {
+    return res.status(500).json({error: "An error occurred while canceling selection"});
+  }
+});
+
+
+router.post("/user/Pilih", async (req, res) => {
+  const {username, password, pilihan} = req.body;
+
+  console.log(username, password);
+  if (!username || !password) {
+    return res.status(400).json({error: "Username and password are required"});
+  }
+
+  try {
+    // Find user by username
+    const user = await userInfo.findOne({nisn: username});
+
+    // If user not found or password doesn't match
+    if (!user || user.password !== password) {
+      return res.status(401).json({error: "Invalid username or password"});
+    }
+
+    if (user.kandidatMPK || user.kandidatOsis) {
+      return res.status(401).json({error: "Kamu sudah Memilih"});
+    }
     // If successful login
+    user.kandidatMPK = pilihan.MPK;
+    user.kandidatOsis = pilihan.OSIS;
+    user.WaktuPemilihan = (new Date());
+
+    const kandidatMPK = await Kandidat.findOne({nomerKandidat: pilihan.MPK, tipe: "MPK"});
+    const kandidatOSIS = await Kandidat.findOne({nomerKandidat: pilihan.OSIS, tipe: "OSIS"});
+
+    if (!kandidatMPK!.totalPemilih) {
+      kandidatMPK!.totalPemilih = 0;
+    }
+    if (!kandidatOSIS!.totalPemilih) {
+      kandidatOSIS!.totalPemilih = 0;
+    }
+    kandidatMPK!.totalPemilih = kandidatMPK!.totalPemilih + 1;
+    kandidatOSIS!.totalPemilih = kandidatOSIS!.totalPemilih + 1;
+    await kandidatMPK!.save();
+    await kandidatOSIS!.save();
+    await user.save();
+
+    return res.status(200).json({message: "Berhasil memilih"});
   } catch (error) {
     return res.status(500).json({error: "An error occurred while logging in"});
   }
@@ -87,8 +173,12 @@ router.post("/user/login", async (req, res) => {
       return res.status(401).json({error: "Invalid username or password"});
     }
 
+    const ret = {message: "Login successful", user, SudahMemilih: false};
+    if (user.WaktuPemilihan) {
+      ret.SudahMemilih = true;
+    }
     // If successful login
-    return res.status(200).json({message: "Login successful", user});
+    return res.status(200).json(ret);
   } catch (error) {
     return res.status(500).json({error: "An error occurred while logging in"});
   }
@@ -120,35 +210,32 @@ router.post("/submit", async (req, res) => {
 });
 
 
-router.post("/migrasi", async (req, res) => {
-  const {nisn, password} = req.body;
+// router.post("/migrasi", async (req, res) => {
+//   const {nisn, password} = req.body;
 
-  // Cari user berdasarkan NISN
-  const user = await userInfo.findOne({nisn});
+//   // Cari user berdasarkan NISN
+//   const user = await userInfo.findOne({nisn});
 
-  if (!user) {
-    return res.status(404).json({
-      message: "User not found",
-    });
-  }
+//   if (!user) {
+//     return res.status(404).json({
+//       message: "User not found",
+//     });
+//   }
 
-  // Cek apakah password lebih dari 5 karakter
-  if (user.password.length > 5) {
-    // Ambil substring 5 karakter pertama
-    const newPassword = password.substring(0, 5);
+//   // Cek apakah password lebih dari 5 karakter
+//   // Ambil substring 5 karakter pertama
+//   const newPassword = password;
 
-    console.log(user.password + " NEW:"+newPassword );
-    // Update password user di database
-    user.password = newPassword;
-    await user.save();
-  } else {
-    return res.status(501).json({message: "SUDAH TERMIGRASI"});
-  }
-  res.json({
-    message: "Password migration successful",
-    data: user,
-  });
-});
+//   console.log(user.password + " NEW:"+newPassword );
+//   // Update password user di database
+//   user.password = newPassword;
+//   await user.save();
+
+//   res.json({
+//     message: "Password migration successful",
+//     data: user,
+//   });
+// });
 
 
 generatePassword(8);
