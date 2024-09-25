@@ -195,8 +195,8 @@ router.post("/submit", async (req, res) => {
 
   const user = new userInfo({
     username: nama,
-    nisn: nama,
-    password: kode,
+    nisn: kode,
+    password: generatePassword(5),
   });
 
   await user.save();
@@ -248,7 +248,7 @@ function generatePassword(length = 12) {
   const allChars = lowercase + numbers;
 
   // Ensure the password is at least 8 characters long
-  if (length < 8) {
+  if (length < 4) {
     throw new Error("Password length must be at least 8 characters");
   }
 
